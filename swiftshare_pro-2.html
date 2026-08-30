@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A11.share</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#08111f;color:#eef6ff}
+.wrap{max-width:1100px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.logo{font-size:26px;font-weight:900}.logo b{color:#39bdf8}.pill{padding:8px 13px;border:1px solid #28415d;border-radius:999px;color:#9db3c9;font-size:13px}
+.hero{padding:28px;border:1px solid #233a54;border-radius:24px;background:linear-gradient(135deg,#0d1d31,#0a1424);margin-bottom:18px}
+.hero h1{font-size:38px;margin:0 0 8px}.hero p{color:#9db3c9;margin:0}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}.card{background:#0d1929;border:1px solid #233a54;border-radius:20px;padding:22px}
+h2{margin-top:0}.drop{border:2px dashed #36536e;border-radius:16px;padding:35px;text-align:center;cursor:pointer;color:#9db3c9}.drop:hover{border-color:#39bdf8}
+input[type=file]{display:none}.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{border:0;border-radius:11px;padding:12px 16px;font-weight:800;cursor:pointer;background:#39bdf8;color:#062033}
+button.alt{background:#20364d;color:#e8f3ff}button.danger{background:#5b2530;color:#ffdce1}
+.file{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1c3045;font-size:14px}
+.code{font-size:36px;letter-spacing:8px;font-weight:900;text-align:center;padding:20px;background:#081321;border-radius:16px;margin:15px 0}
+input.codein{width:100%;background:#081321;color:white;border:1px solid #29445f;border-radius:12px;padding:14px;text-align:center;font-size:20px;letter-spacing:5px}
+.bar{height:13px;background:#172b40;border-radius:99px;overflow:hidden;margin:14px 0}.fill{height:100%;width:0;background:#39bdf8;transition:width .15s}
+.stats{display:flex;justify-content:space-between;color:#9db3c9;font-size:13px}.log{max-height:160px;overflow:auto;font-size:13px;color:#9db3c9}
+.item{padding:8px 0;border-bottom:1px solid #172b40}.ok{color:#55df9a}.warn{color:#ffd166}.note{color:#9db3c9;font-size:12px;line-height:1.5}
+footer{text-align:center;color:#637c95;font-size:12px;padding:18px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.hero h1{font-size:30px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><div class="logo">Swift<b>Share</b> ⚡</div><div class="pill" id="status">● Ready</div></header>
+
+<section class="hero">
+<h1>A11.share</h1>
+<p>Advanced local file-sharing interface with pairing, drag & drop, progress, speed and transfer history.</p>
+</section>
+
+<div class="grid">
+<section class="card">
+<h2>📤 Send</h2>
+<label class="drop" id="drop" for="files">Drop files here<br><small>or click to choose multiple files</small></label>
+<input id="files" type="file" multiple>
+<div id="fileList"></div>
+<div class="row"><button onclick="makeCode()">Generate Pair Code</button><button class="alt" onclick="clearFiles()">Clear</button></div>
+<div class="code" id="pairCode">------</div>
+<p class="note">For a real two-PC connection, this UI needs WebRTC signaling. This standalone HTML demonstrates the complete front-end flow without sending files to a server.</p>
+</section>
+
+<section class="card">
+<h2>📥 Receive</h2>
+<p class="note">Enter the sender's pairing code.</p>
+<input class="codein" id="joinCode" maxlength="6" placeholder="123456" inputmode="numeric">
+<div class="row"><button onclick="connect()">Connect</button><button class="alt" onclick="simulate()">Demo Receive</button></div>
+<hr style="border:0;border-top:1px solid #233a54;margin:22px 0">
+<h3>Connection</h3>
+<div id="connection" class="note">Not connected</div>
+</section>
+</div>
+
+<section class="card" style="margin-top:18px">
+<h2>📊 Transfer</h2>
+<div class="stats"><span id="fileName">No active transfer</span><span id="pct">0%</span></div>
+<div class="bar"><div class="fill" id="fill"></div></div>
+<div class="stats"><span id="speed">0 MB/s</span><span id="eta">ETA —</span></div>
+<div class="row"><button onclick="startTransfer()">▶ Start</button><button class="alt" onclick="pauseTransfer()">Ⅱ Pause</button><button class="danger" onclick="cancelTransfer()">✕ Cancel</button></div>
+</section>
+
+<section class="card" style="margin-top:18px">
+<h2>🧾 Transfer History</h2><div class="log" id="history"><div class="item">No transfers yet.</div></div>
+</section>
+<footer>A11.share • Standalone HTML demo • No files are uploaded by this page</footer>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let selected=[], timer=null, progress=0, paused=false, cancelled=false;
+
+$('files').addEventListener('change',e=>{selected=[...e.target.files];renderFiles()});
+$('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').style.borderColor='#39bdf8'});
+$('drop').addEventListener('dragleave',()=>$('drop').style.borderColor='');
+$('drop').addEventListener('drop',e=>{e.preventDefault();selected=[...e.dataTransfer.files];renderFiles()});
+
+function renderFiles(){
+ $('fileList').innerHTML=selected.map(f=>`<div class="file"><span>📄 ${esc(f.name)}</span><span>${size(f.size)}</span></div>`).join('');
+ $('status').textContent=selected.length?`● ${selected.length} file(s) ready`:'● Ready';
+}
+function makeCode(){$('pairCode').textContent=Math.floor(100000+Math.random()*900000);$('status').textContent='● Pair code ready'}
+function connect(){
+ const c=$('joinCode').value.replace(/\D/g,'');
+ if(c.length!==6)return alert('Enter a 6-digit pairing code.');
+ $('connection').innerHTML='<span class="ok">● Connected to Sender-PC (demo)</span>';
+ $('status').textContent='● Connected';
+}
+function startTransfer(){
+ if(!selected.length)return alert('Choose files first.');
+ if(timer)clearInterval(timer);progress=0;paused=false;cancelled=false;
+ const f=selected[0];$('fileName').textContent=f.name;
+ const start=Date.now();
+ timer=setInterval(()=>{
+  if(paused)return;
+  progress=Math.min(100,progress+Math.random()*5+2);
+  $('fill').style.width=progress+'%';$('pct').textContent=Math.floor(progress)+'%';
+  const elapsed=(Date.now()-start)/1000;const mb=f.size/1048576;const sp=mb/(elapsed||1);
+  $('speed').textContent=sp.toFixed(1)+' MB/s';
+  $('eta').textContent=progress>=100?'Complete':`ETA ${Math.max(1,Math.ceil((elapsed*(100-progress)/progress)))}s`;
+  if(progress>=100){clearInterval(timer);timer=null;addHistory(f.name,'Completed');$('status').textContent='● Transfer complete'}
+ },180);
+}
+function pauseTransfer(){paused=!paused;$('status').textContent=paused?'● Paused':'● Transferring'}
+function cancelTransfer(){if(timer)clearInterval(timer);timer=null;cancelled=true;progress=0;$('fill').style.width='0%';$('pct').textContent='0%';$('eta').textContent='ETA —';$('status').textContent='● Cancelled'}
+function simulate(){makeCode();$('connection').innerHTML='<span class="ok">● Demo-PC connected</span>';if(!selected.length){$('fileName').textContent='Demo-file.zip';selected=[{name:'Demo-file.zip',size:50*1048576}]};startTransfer()}
+function clearFiles(){selected=[];$('files').value='';$('fileList').innerHTML='';$('pairCode').textContent='------';$('status').textContent='● Ready'}
+function addHistory(name,state){const h=$('history');if(h.textContent.includes('No transfers'))h.innerHTML='';h.innerHTML=`<div class="item"><span class="ok">✓ ${esc(name)}</span> — ${state} — ${new Date().toLocaleTimeString()}</div>`+h.innerHTML}
+function size(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';if(b<1073741824)return(b/1048576).toFixed(1)+' MB';return(b/1073741824).toFixed(2)+' GB'}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+</script>
+</body>
+</html>
